@@ -1,0 +1,125 @@
+\documentclass[8pt, a4paper, landscape]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=0.8cm]{geometry}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{multicol}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{parskip}
+
+% Configuration ultra-compacte
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1pt}
+\titlespacing*{\section}{0pt}{2pt}{1pt}
+\titlespacing*{\subsection}{0pt}{2pt}{1pt}
+\setlist[itemize]{leftmargin=*, nosep}
+
+% Commandes raccourcis
+\newcommand{\norm}[2]{\| #1 \|_{#2}^2}
+\newcommand{\inv}{^{-1}}
+\newcommand{\T}{^T}
+\newcommand{\E}{\mathbb{E}}
+
+\begin{document}
+
+\begin{multicols*}{2}
+
+% --- SECTION 1 ---
+\section*{Estimation Statique (Cadre Gaussien)}
+\textbf{Problème :} Estimer un état $x \in \mathbb{R}^n$ sachant un a priori $x_b$ et une mesure $y \in \mathbb{R}^m$.
+\begin{itemize}
+    \item \textbf{Modèle :} $y = Ax + \epsilon$ avec $\epsilon \sim \mathcal{N}(0, R)$.
+    \item \textbf{A priori :} $x \sim \mathcal{N}(x_b, B)$. Hypothèse : $x \perp \epsilon$.
+\end{itemize}
+
+\subsection*{1. Fonction de Coût (MAP)}
+L'estimateur du Maximum A Posteriori minimise l'énergie $J(x)$ (log-vraisemblance négative) :
+\begin{equation*}
+    J(x) = \frac{1}{2}(x - x_b)\T B\inv (x - x_b) + \frac{1}{2}(y - Ax)\T R\inv (y - Ax)
+\end{equation*}
+\textit{Interprétation :} Somme pondérée des écarts quadratiques. Les matrices inverses $B\inv$ et $R\inv$ sont des matrices de \textbf{précision}.
+
+\subsection*{2. Résolution (BLUE)}
+En résolvant $\nabla J(x) = 0$, on obtient la solution analytique.
+\textbf{Forme "Information"} : $\hat{x} = (B\inv + A\T R\inv A)\inv (B\inv x_b + A\T R\inv y)$
+
+\textbf{Forme "Gain" (Kalman)} :
+\begin{equation*}
+    \hat{x} = x_b + K (y - A x_b) \quad \text{avec} \quad K = B A\T (A B A\T + R)\inv
+\end{equation*}
+
+\subsection*{3. Covariance a posteriori $P_a$}
+Représente l'incertitude restante après fusion.
+\begin{itemize}
+    \item $P_a = (I - KA)B$ (Toujours "plus petite" que $B$ et $R$).
+\end{itemize}
+
+% --- SECTION 2 ---
+\section*{Filtre de Kalman Linéaire}
+Système : $x_k = M x_{k-1} + \epsilon^m$ et $y_k = H x_k + \epsilon^o$.
+
+\subsection*{1. Prédiction (Propagation $k-1 \to k$)}
+Transport de la moyenne et diffusion de l'incertitude.
+\begin{align*}
+    \hat{x}_{k|k-1} &= M \hat{x}_{k-1|k-1} \\
+    P_{k|k-1} &= M P_{k-1|k-1} M\T + Q
+\end{align*}
+
+\subsection*{2. Analyse (Mise à jour à $k$)}
+Correction par l'innovation $d_k = y_k - H \hat{x}_{k|k-1}$.
+\begin{align*}
+    S_k &= H P_{k|k-1} H\T + R & \text{(Covariance Innovation)} \\
+    K_k &= P_{k|k-1} H\T S_k\inv & \text{(Gain Optimal)} \\
+    \hat{x}_{k|k} &= \hat{x}_{k|k-1} + K_k d_k & \text{(État corrigé)} \\
+    P_{k|k} &= (I - K_k H) P_{k|k-1} & \text{(Covariance corrigée)}
+\end{align*}
+
+% --- SECTION 3 ---
+\section*{Non-Linéaire (EKF et Gauss-Newton)}
+\textbf{Problème :} Minimiser $J(x) = \frac{1}{2} \| F(x) \|^2_{W}$ où $F(x)$ est le vecteur des résidus non-linéaires.
+
+\subsection*{1. Algorithme de Gauss-Newton (Essentiel)}
+On remplace la fonction non-linéaire par son approximation tangente (Jacobienne $J_F$) pour transformer le pb en moindres carrés linéaires itératifs.
+\textbf{Formule d'incrément :} À l'itération $i$, on résout le système normal linéarisé pour trouver le pas $\delta x$ :
+\begin{equation*}
+    \delta x = - \underbrace{(J_F\T W J_F)\inv}_{\text{Covariance approx}} \underbrace{J_F\T W F(x^{(i)})}_{\text{Gradient}}
+\end{equation*}
+Mise à jour : $x^{(i+1)} = x^{(i)} + \delta x$.
+
+\subsection*{2. Extended Kalman Filter (EKF)}
+Système : $x_k = f(x_{k-1}) + \epsilon^m$ et $y_k = h(x_k) + \epsilon^o$.
+L'EKF applique la linéarisation autour de la trajectoire courante.
+
+\textbf{A. Linéarisation (Jacobiennes) :}
+$$ F_k = \frac{\partial f}{\partial x}\bigg|_{\hat{x}_{k-1|k-1}} \quad \text{et} \quad H_k = \frac{\partial h}{\partial x}\bigg|_{\hat{x}_{k|k-1}} $$
+
+\textbf{B. Prédiction (État non-linéaire / Covariance linéarisée) :}
+\begin{align*}
+    \hat{x}_{k|k-1} &= f(\hat{x}_{k-1|k-1}) & \text{(Fonction exacte)} \\
+    P_{k|k-1} &= F_k P_{k-1|k-1} F_k\T + Q & \text{(Jacobienne)}
+\end{align*}
+
+\textbf{C. Mise à jour (Innovation non-linéaire / Gain linéarisé) :}
+\begin{align*}
+    S_k &= H_k P_{k|k-1} H_k\T + R & \text{(Jacobienne)} \\
+    K_k &= P_{k|k-1} H_k\T S_k\inv & \text{(Jacobienne)} \\
+    \hat{x}_{k|k} &= \hat{x}_{k|k-1} + K_k \underbrace{(y_k - h(\hat{x}_{k|k-1}))}_{\text{Innovation exacte}} & \\
+    P_{k|k} &= (I - K_k H_k) P_{k|k-1} & \text{(Jacobienne)}
+\end{align*}
+\textit{Note :} On propage la moyenne avec le modèle physique ($f, h$), mais on propage l'incertitude avec le modèle tangent ($F_k, H_k$).
+
+\subsection*{3. Approche Variationnelle (4D-Var)}
+Minimisation globale sur une fenêtre de temps $[0, T]$ (Gauss-Newton géant sur la condition initiale $x_0$) :
+$$ J(x_0) = \frac{1}{2}\|x_0 - x_b\|_{B\inv}^2 + \sum_{k=0}^T \frac{1}{2} \| y_k - h_k(M_{0\to k}(x_0)) \|_{R\inv}^2 $$
+
+\section*{IV. Outils Mathématiques}
+\textbf{Identité de Sherman-Morrison-Woodbury :}
+Permet d'inverser dans l'espace des mesures ($m$) plutôt que l'état ($n$).
+\begin{equation*}
+    (P\inv + H\T R\inv H)\inv = P - P H\T (H P H\T + R)\inv H P
+\end{equation*}
+Prouve l'équivalence : Forme Info $(P\inv + \dots)\inv \Leftrightarrow$ Forme Kalman $(I - KH)P$.
+
+\end{multicols*}
+\end{document}
